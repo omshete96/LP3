@@ -1,0 +1,140 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import StandardScaler
+import io
+import warnings
+warnings.filterwarnings('ignore')
+
+df = pd.read_csv("churn.csv")
+df.head(10)
+
+df=df.drop(['RowNumber','CustomerId','Surname'],axis=1)
+df.head()
+
+df.isna().any()
+df.isna().sum()
+
+print(df.shape)
+df.info()
+
+df.describe()
+
+scaler=StandardScaler()
+## Extract only the Numerical Columns to perform Bivariate Analysis
+subset=df.drop(['Geography','Gender','HasCrCard','IsActiveMember'],axis=1)
+scaled=scaler.fit_transform(subset)
+scaled_df=pd.DataFrame(scaled,columns=subset.columns)
+sns.pairplot(scaled_df,diag_kind='kde')
+
+sns.heatmap(scaled_df.corr(),annot=True,cmap='rainbow')
+
+sns.countplot(x='Geography',data=df,hue='Exited')
+plt.show()
+sns.countplot(x='Gender',data=df,hue='Exited')
+plt.show()
+sns.countplot(x='HasCrCard',data=df,hue='Exited')
+plt.show()
+sns.countplot(x='IsActiveMember',data=df,hue='Exited')
+plt.show()
+
+
+# Drop 'Exited' column from subset if it exists
+subset = subset.drop('Exited', axis=1, errors='ignore')
+
+# Loop through remaining columns and plot boxplots
+for col in subset.columns:
+    plt.figure(figsize=(8, 5))
+    sns.boxplot(x='Exited', y=col, hue='Gender', data=df)
+    plt.title(f'Boxplot of {col} vs Exited by Gender')
+    plt.show()
+
+X=df.drop('Exited',axis=1)
+y=df.pop('Exited')
+
+from sklearn.model_selection import train_test_split
+X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.10,random_state=5)
+X_train,X_val,y_train,y_val=train_test_split(X_train,y_train,test_size=0.10,random_state=5)
+print("X_train size is {}".format(X_train.shape[0]))
+print("X_val size is {}".format(X_val.shape[0]))
+print("X_test size is {}".format(X_test.shape[0]))
+
+from sklearn.preprocessing import StandardScaler
+scaler=StandardScaler()
+num_cols=['CreditScore','Age','Tenure','Balance','NumOfProducts','EstimatedSalary']
+num_subset=scaler.fit_transform(X_train[num_cols])
+X_train_num_df=pd.DataFrame(num_subset,columns=num_cols)
+X_train_num_df['Geography']=list(X_train['Geography'])
+X_train_num_df['Gender']=list(X_train['Gender'])
+X_train_num_df['HasCrCard']=list(X_train['HasCrCard'])
+X_train_num_df['IsActiveMember']=list(X_train['IsActiveMember'])
+X_train_num_df.head()
+## Standardise the Validation data
+num_subset=scaler.fit_transform(X_val[num_cols])
+X_val_num_df=pd.DataFrame(num_subset,columns=num_cols)
+X_val_num_df['Geography']=list(X_val['Geography'])
+X_val_num_df['Gender']=list(X_val['Gender'])
+X_val_num_df['HasCrCard']=list(X_val['HasCrCard'])
+X_val_num_df['IsActiveMember']=list(X_val['IsActiveMember'])
+## Standardise the Test data
+num_subset=scaler.fit_transform(X_test[num_cols])
+X_test_num_df=pd.DataFrame(num_subset,columns=num_cols)
+X_test_num_df['Geography']=list(X_test['Geography'])
+X_test_num_df['Gender']=list(X_test['Gender'])
+X_test_num_df['HasCrCard']=list(X_test['HasCrCard'])
+X_test_num_df['IsActiveMember']=list(X_test['IsActiveMember'])
+
+## Convert the categorical features to numerical
+X_train_num_df=pd.get_dummies(X_train_num_df,columns=['Geography','Gender'])
+X_test_num_df=pd.get_dummies(X_test_num_df,columns=['Geography','Gender'])
+X_val_num_df=pd.get_dummies(X_val_num_df,columns=['Geography','Gender'])
+X_train_num_df.head()
+
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Dense
+
+model=Sequential()
+model.add(Dense(7,activation='relu'))
+model.add(Dense(10,activation='relu'))
+model.add(Dense(1,activation='sigmoid'))
+
+import tensorflow as tf
+optimizer=tf.keras.optimizers.Adam(0.01)
+model.compile(loss='binary_crossentropy',optimizer=optimizer,metrics=['accuracy'])
+model.fit(X_train_num_df,y_train,epochs=100,batch_size=10,verbose=1)
+
+y_pred_val=model.predict(X_val_num_df)
+y_pred_val[y_pred_val>0.5]=1
+y_pred_val[y_pred_val <0.5]=0
+y_pred_val=y_pred_val.tolist()
+X_compare_val=X_val.copy()
+X_compare_val['y_actual']=y_val
+X_compare_val['y_pred']=y_pred_val
+X_compare_val.head(10)
+
+from sklearn.metrics import confusion_matrix
+cm_val=confusion_matrix(y_val,y_pred_val)
+cm_val
+
+Accuracy=782/900
+print("Accuracy of the Model on the Validation Data set is 86.89%")
+loss1,accuracy1=model.evaluate(X_train_num_df,y_train,verbose=False)
+loss2,accuracy2=model.evaluate(X_val_num_df,y_val,verbose=False)
+print("Train Loss {}".format(loss1))
+print("Train Accuracy {}".format(accuracy1))
+print("Val Loss {}".format(loss2))
+print("Val Accuracy {}".format(accuracy2))
+
+from sklearn import metrics
+y_pred_test=model.predict(X_test_num_df)
+y_pred_test[y_pred_test>0.5]=1
+y_pred_test[y_pred_test <0.5]=0
+cm_test=metrics.confusion_matrix(y_test,y_pred_test)
+cm_test
+print("Test Confusion Matrix")
+cm_test
+
+loss3,accuracy3=model.evaluate(X_test_num_df,y_test,verbose=False)
+print("Test Accuracy is {}".format(accuracy3))
+print("Test loss is {}".format(loss3))
